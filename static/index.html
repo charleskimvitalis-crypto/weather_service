@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="도시를 검색해 오늘의 시간별 날씨와 기온 그래프를 확인하세요."
+    />
+    <title>오늘, 여기 날씨</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">TODAY'S FORECAST</p>
+        <h1>오늘, 여기 날씨</h1>
+        <p class="hero-copy">
+          궁금한 도시를 검색하면 오늘 하루의 날씨 흐름을 한눈에 보여드려요.
+        </p>
+
+        <form id="search-form" class="search" role="search">
+          <label class="sr-only" for="location-input">도시 또는 지역</label>
+          <span class="search-icon" aria-hidden="true">⌖</span>
+          <input
+            id="location-input"
+            name="location"
+            type="search"
+            value="서울"
+            maxlength="100"
+            placeholder="도시 또는 지역을 입력하세요"
+            autocomplete="address-level2"
+            required
+          />
+          <button type="submit">날씨 보기</button>
+        </form>
+        <div class="quick-search" aria-label="빠른 도시 검색">
+          <span>빠른 검색</span>
+          <button type="button" data-city="서울">서울</button>
+          <button type="button" data-city="부산">부산</button>
+          <button type="button" data-city="제주">제주</button>
+          <button type="button" data-city="도쿄">도쿄</button>
+        </div>
+      </header>
+
+      <section id="status" class="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>서울의 하늘을 살펴보고 있어요…</span>
+      </section>
+
+      <section id="weather-content" class="weather-content" hidden>
+        <div class="location-heading">
+          <div>
+            <p id="location-detail" class="location-detail"></p>
+            <h2 id="location-name"></h2>
+          </div>
+          <p id="updated-time" class="updated-time"></p>
+        </div>
+
+        <div class="overview-grid">
+          <article class="current-card">
+            <div>
+              <p class="card-label">지금</p>
+              <div class="temperature-line">
+                <span id="weather-icon" class="weather-icon"></span>
+                <strong id="current-temperature"></strong>
+              </div>
+              <p id="current-description" class="current-description"></p>
+              <p id="feels-like" class="feels-like"></p>
+            </div>
+            <dl class="metrics">
+              <div>
+                <dt>습도</dt>
+                <dd id="current-humidity"></dd>
+              </div>
+              <div>
+                <dt>바람</dt>
+                <dd id="current-wind"></dd>
+              </div>
+              <div>
+                <dt>강수량</dt>
+                <dd id="current-rain"></dd>
+              </div>
+            </dl>
+          </article>
+
+          <article class="chart-card">
+            <div class="card-header">
+              <div>
+                <p class="card-label">오늘의 흐름</p>
+                <h3>시간별 기온</h3>
+              </div>
+              <div class="legend" aria-label="그래프 범례">
+                <span><i class="temp-dot"></i>기온</span>
+                <span><i class="rain-dot"></i>강수확률</span>
+              </div>
+            </div>
+            <div id="weather-chart" class="chart" role="img"></div>
+          </article>
+        </div>
+
+        <article class="hourly-card">
+          <div class="card-header">
+            <div>
+              <p class="card-label">24시간 예보</p>
+              <h3>오늘 시간별 날씨</h3>
+            </div>
+            <p class="scroll-hint">옆으로 밀어 전체 보기 →</p>
+          </div>
+          <div id="hourly-list" class="hourly-list"></div>
+        </article>
+      </section>
+    </main>
+
+    <footer>
+      날씨: Open-Meteo · 위치 검색: © OpenStreetMap contributors · 예보는 실제 관측과 다를 수 있습니다.
+    </footer>
+  </body>
+</html>

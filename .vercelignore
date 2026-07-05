@@ -1,0 +1,8 @@
+.venv/
+.matplotlib/
+__pycache__/
+*.pyc
+*.png
+retest_temperature.png
+plot_today_temperature.py
+requirements-dev.txt

@@ -1,0 +1,7 @@
+.DS_Store
+.venv/
+.vercel/
+.matplotlib/
+__pycache__/
+*.py[cod]
+retest_temperature.png

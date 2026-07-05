@@ -1,36 +1,64 @@
 #!/usr/bin/env python3
-"""오늘의 날씨를 검색하고 시각화하는 소형 웹 서버."""
+"""오늘의 날씨를 검색하고 시각화하는 Flask 애플리케이션."""
 
-import argparse
 import json
-import mimetypes
+import os
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlencode
+
+from flask import Flask, jsonify, request, send_from_directory
 
 from weather_today import WEATHER_CODES, fetch_json, fetch_today_weather
 
 
 BASE_DIR = Path(__file__).resolve().parent
-STATIC_DIR = BASE_DIR / "static"
+PUBLIC_DIR = BASE_DIR / "public"
 GEOCODING_API_URL = "https://geocoding-api.open-meteo.com/v1/search"
 NOMINATIM_API_URL = "https://nominatim.openstreetmap.org/search"
+
+# Vercel이 자동으로 찾는 WSGI 진입점이다.
+app = Flask(__name__, static_folder=None)
 
 
 def search_location(query: str) -> dict:
     """장소 이름을 위도, 경도, 시간대로 변환한다."""
     params = {
+        "q": query,
+        "format": "jsonv2",
+        "limit": 1,
+        "accept-language": "ko",
+    }
+    results = fetch_json(
+        f"{NOMINATIM_API_URL}?{urlencode(params)}",
+        headers={"User-Agent": "TodayWeatherDemo/1.0"},
+    )
+    if results:
+        result = results[0]
+        display_parts = result.get("display_name", "").split(", ")
+        return {
+            "name": result.get("name") or display_parts[0],
+            "admin1": display_parts[1] if len(display_parts) > 2 else "",
+            "country": display_parts[-1] if len(display_parts) > 1 else "",
+            "latitude": float(result["lat"]),
+            "longitude": float(result["lon"]),
+            "timezone": "auto",
+        }
+
+    # Nominatim에 결과가 없는 경우 Open-Meteo 지오코더로 한 번 더 찾는다.
+    fallback_params = {
         "name": query,
         "count": 1,
         "language": "ko",
         "format": "json",
     }
-    data = fetch_json(f"{GEOCODING_API_URL}?{urlencode(params)}")
-    results = data.get("results", [])
-    if results:
-        result = results[0]
+    fallback_data = fetch_json(
+        f"{GEOCODING_API_URL}?{urlencode(fallback_params)}"
+    )
+    fallback_results = fallback_data.get("results", [])
+    if fallback_results:
+        result = fallback_results[0]
         return {
             "name": result["name"],
             "admin1": result.get("admin1", ""),
@@ -40,30 +68,7 @@ def search_location(query: str) -> dict:
             "timezone": result.get("timezone", "auto"),
         }
 
-    # Open-Meteo 지오코더가 한글 검색어를 찾지 못하는 경우를 보완한다.
-    fallback_params = {
-        "q": query,
-        "format": "jsonv2",
-        "limit": 1,
-        "accept-language": "ko",
-    }
-    fallback_results = fetch_json(
-        f"{NOMINATIM_API_URL}?{urlencode(fallback_params)}",
-        headers={"User-Agent": "TodayWeatherDemo/1.0"},
-    )
-    if not fallback_results:
-        raise ValueError("입력한 위치를 찾을 수 없습니다.")
-
-    result = fallback_results[0]
-    display_parts = result.get("display_name", "").split(", ")
-    return {
-        "name": result.get("name") or display_parts[0],
-        "admin1": display_parts[1] if len(display_parts) > 2 else "",
-        "country": display_parts[-1] if len(display_parts) > 1 else "",
-        "latitude": float(result["lat"]),
-        "longitude": float(result["lon"]),
-        "timezone": "auto",
-    }
+    raise ValueError("입력한 위치를 찾을 수 없습니다.")
 
 
 def build_weather_response(query: str) -> dict:
@@ -111,106 +116,60 @@ def build_weather_response(query: str) -> dict:
         },
         "hourly": hourly_rows,
         "units": {
-            "temperature": hourly["temperature_2m"][0] is not None
-            and weather["hourly_units"]["temperature_2m"],
+            "temperature": weather["hourly_units"]["temperature_2m"],
             "windSpeed": weather["hourly_units"]["wind_speed_10m"],
         },
     }
 
 
-class WeatherRequestHandler(BaseHTTPRequestHandler):
-    """정적 파일과 날씨 JSON API를 제공한다."""
-
-    def do_GET(self) -> None:
-        parsed = urlparse(self.path)
-        if parsed.path == "/api/weather":
-            self.serve_weather_api(parse_qs(parsed.query))
-            return
-
-        self.serve_static_file(parsed.path)
-
-    def serve_weather_api(self, query_params: dict[str, list[str]]) -> None:
-        location_query = query_params.get("location", [""])[0].strip()
-        if not location_query:
-            self.send_json(
-                {"error": "위치를 입력해 주세요."},
-                status=HTTPStatus.BAD_REQUEST,
-            )
-            return
-        if len(location_query) > 100:
-            self.send_json(
-                {"error": "위치 이름은 100자 이하로 입력해 주세요."},
-                status=HTTPStatus.BAD_REQUEST,
-            )
-            return
-
-        try:
-            payload = build_weather_response(location_query)
-            self.send_json(payload)
-        except ValueError as error:
-            self.send_json({"error": str(error)}, status=HTTPStatus.NOT_FOUND)
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, KeyError):
-            self.send_json(
-                {"error": "날씨 서비스에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."},
-                status=HTTPStatus.BAD_GATEWAY,
-            )
-
-    def serve_static_file(self, request_path: str) -> None:
-        relative_path = "index.html" if request_path == "/" else request_path.lstrip("/")
-        file_path = (STATIC_DIR / relative_path).resolve()
-
-        try:
-            file_path.relative_to(STATIC_DIR.resolve())
-        except ValueError:
-            self.send_error(HTTPStatus.NOT_FOUND)
-            return
-
-        if not file_path.is_file():
-            self.send_error(HTTPStatus.NOT_FOUND)
-            return
-
-        content_type, _ = mimetypes.guess_type(file_path.name)
-        body = file_path.read_bytes()
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", f"{content_type or 'application/octet-stream'}; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def send_json(
-        self, payload: dict, status: HTTPStatus = HTTPStatus.OK
-    ) -> None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, format: str, *args: object) -> None:
-        print(f"[weather-web] {self.address_string()} - {format % args}")
+@app.get("/")
+def index():
+    """로컬 Flask 실행 시 메인 페이지를 제공한다."""
+    return send_from_directory(PUBLIC_DIR, "index.html")
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="날씨 검색 웹 서버를 실행합니다.")
-    parser.add_argument("--host", default="127.0.0.1", help="바인딩할 호스트")
-    parser.add_argument("--port", type=int, default=8000, help="사용할 포트")
-    return parser.parse_args()
+@app.get("/<path:filename>")
+def public_file(filename: str):
+    """로컬 실행용 정적 파일 라우트다. Vercel에서는 public CDN이 처리한다."""
+    return send_from_directory(PUBLIC_DIR, filename)
 
 
-def main() -> None:
-    args = parse_args()
-    server = ThreadingHTTPServer((args.host, args.port), WeatherRequestHandler)
-    print(f"날씨 웹페이지: http://{args.host}:{args.port}")
-    print("종료하려면 Ctrl+C를 누르세요.")
+@app.get("/api/health")
+def health():
+    """배포 상태 확인용 경량 엔드포인트."""
+    return jsonify({"status": "ok"})
+
+
+@app.get("/api/weather")
+def weather_api():
+    """위치 이름을 받아 오늘 날씨를 JSON으로 반환한다."""
+    location_query = request.args.get("location", "").strip()
+    if not location_query:
+        return jsonify({"error": "위치를 입력해 주세요."}), HTTPStatus.BAD_REQUEST
+    if len(location_query) > 100:
+        return (
+            jsonify({"error": "위치 이름은 100자 이하로 입력해 주세요."}),
+            HTTPStatus.BAD_REQUEST,
+        )
+
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\n서버를 종료합니다.")
-    finally:
-        server.server_close()
+        return jsonify(build_weather_response(location_query))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), HTTPStatus.NOT_FOUND
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, KeyError):
+        return (
+            jsonify(
+                {
+                    "error": (
+                        "날씨 서비스에 연결하지 못했습니다. "
+                        "잠시 후 다시 시도해 주세요."
+                    )
+                }
+            ),
+            HTTPStatus.BAD_GATEWAY,
+        )
 
 
 if __name__ == "__main__":
-    main()
+    port = int(os.environ.get("PORT", "8000"))
+    app.run(host="127.0.0.1", port=port, debug=True)

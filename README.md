@@ -1,66 +1,132 @@
 # 오늘, 여기 날씨
 
 도시나 지역 이름을 입력하면 Open-Meteo에서 오늘의 시간별 날씨를 가져와
-기온과 강수확률 그래프로 보여주는 웹페이지입니다.
+기온과 강수확률 그래프로 보여주는 Flask 웹 애플리케이션입니다.
+
+## 주요 기능
+
+- 한글·영문 위치 검색
+- 현재 기온, 체감온도, 습도, 바람, 강수량 표시
+- 오늘의 시간별 기온과 강수확률 SVG 그래프
+- 모바일·데스크톱 반응형 화면
+- Flask API와 Vercel Python Runtime 지원
 
 ## 실행 환경
 
-- Python 3.10 이상
+- Python 3.12 권장
 - 인터넷 연결
-- 별도 Python 패키지 설치 불필요
 
-## 실행 방법
+## 로컬 실행
 
-프로젝트 폴더에서 다음 명령을 실행합니다.
+프로젝트 폴더에서 가상환경을 만들고 Flask를 설치합니다.
 
 ```bash
-python3 app.py
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-터미널에 표시되는 주소를 브라우저에서 엽니다.
+Flask 개발 서버를 실행합니다.
+
+```bash
+python app.py
+```
+
+브라우저에서 다음 주소를 엽니다.
 
 ```text
 http://127.0.0.1:8000
 ```
 
+다른 포트를 사용하려면 `PORT` 환경 변수를 지정합니다.
+
+```bash
+PORT=8080 python app.py
+```
+
 서버를 종료하려면 실행 중인 터미널에서 `Ctrl+C`를 누릅니다.
 
-다른 포트를 사용하려면 `--port` 옵션을 지정합니다.
+## API
 
-```bash
-python3 app.py --port 8080
+상태 확인:
+
+```text
+GET /api/health
 ```
 
-같은 네트워크의 다른 기기에서도 접속하려면 다음과 같이 실행한 뒤,
-컴퓨터의 로컬 IP 주소와 포트를 이용해 접속합니다.
+날씨 검색:
 
-```bash
-python3 app.py --host 0.0.0.0
+```text
+GET /api/weather?location=서울
 ```
 
-## 사용 방법
+## Vercel 배포
 
-1. 검색창에 `서울`, `부산`, `New York` 같은 도시 또는 지역명을 입력합니다.
-2. **날씨 보기** 버튼을 누릅니다.
-3. 현재 날씨, 습도, 바람, 강수량과 오늘의 시간별 기온·강수확률을 확인합니다.
+이 프로젝트는 루트의 `app.py`에서 Flask WSGI 객체 `app`을 내보내므로
+Vercel이 Flask 프로젝트로 자동 감지합니다. 별도 Build Command나 Output
+Directory를 설정하지 않습니다.
+
+### Git 저장소로 배포
+
+1. 프로젝트를 GitHub, GitLab 또는 Bitbucket 저장소에 푸시합니다.
+2. [Vercel 새 프로젝트](https://vercel.com/new)에서 저장소를 가져옵니다.
+3. Framework Preset과 빌드 설정은 자동 감지된 값을 유지합니다.
+4. **Deploy**를 누릅니다.
+
+### Vercel CLI로 배포
+
+Vercel CLI를 설치한 뒤 프로젝트 루트에서 실행합니다.
+
+```bash
+npm install -g vercel
+vercel
+```
+
+미리보기 배포를 확인한 후 프로덕션으로 배포합니다.
+
+```bash
+vercel --prod
+```
+
+배포 후 다음 주소로 상태를 확인할 수 있습니다.
+
+```text
+https://배포-도메인.vercel.app/api/health
+```
+
+## Matplotlib 그래프 생성
+
+Matplotlib까지 포함된 개발용 의존성을 설치합니다.
+
+```bash
+pip install -r requirements-dev.txt
+python plot_today_temperature.py
+```
+
+기본 결과는 `today_temperature.png`에 저장됩니다.
 
 ## 파일 구성
 
 ```text
 .
-├── app.py                 # 웹 서버, 위치 검색 및 날씨 API
-├── weather_today.py       # Open-Meteo 날씨 조회 로직
-└── static/
-    ├── index.html         # 웹페이지 구조
-    ├── styles.css         # 반응형 화면 디자인
-    └── app.js             # 검색, 데이터 표시 및 SVG 그래프
+├── app.py                       # Flask 앱과 날씨 API
+├── weather_today.py             # Open-Meteo 날씨 조회 로직
+├── plot_today_temperature.py    # Matplotlib 그래프 생성
+├── requirements.txt             # Vercel 운영 의존성
+├── requirements-dev.txt         # 그래프 생성을 포함한 개발 의존성
+├── .python-version              # Vercel Python 버전
+├── .vercelignore                # 배포 제외 파일
+└── public/
+    ├── index.html               # 웹페이지 구조
+    ├── styles.css               # 반응형 화면 디자인
+    └── app.js                   # 검색, 표시 및 SVG 그래프
 ```
 
 ## 문제 해결
 
-- **위치를 찾을 수 없다는 메시지가 나올 때**: 더 구체적인 도시 이름을 입력합니다.
+- **위치를 찾을 수 없을 때**: 국가나 주 이름을 함께 입력합니다.
 - **날씨 서비스에 연결할 수 없을 때**: 인터넷 연결을 확인하고 잠시 후 다시 시도합니다.
-- **포트가 이미 사용 중일 때**: `python3 app.py --port 8080`처럼 다른 포트를 지정합니다.
+- **포트가 사용 중일 때**: `PORT=8080 python app.py`처럼 다른 포트를 지정합니다.
 
-날씨 데이터는 [Open-Meteo](https://open-meteo.com/)를 사용하고, 한글 위치명
-검색 보완에는 [OpenStreetMap](https://www.openstreetmap.org/) 데이터를 사용합니다.
+날씨 데이터는 [Open-Meteo](https://open-meteo.com/)를 사용하고, 위치 검색에는
+[OpenStreetMap](https://www.openstreetmap.org/) 데이터를 사용합니다.

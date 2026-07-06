@@ -116,6 +116,7 @@ python plot_today_temperature.py
 ├── requirements-dev.txt         # 그래프 생성을 포함한 개발 의존성
 ├── .python-version              # Vercel Python 버전
 ├── .vercelignore                # 배포 제외 파일
+├── vercel.json                  # 루트 페이지 Vercel 라우팅
 └── public/
     ├── index.html               # 웹페이지 구조
     ├── styles.css               # 반응형 화면 디자인
